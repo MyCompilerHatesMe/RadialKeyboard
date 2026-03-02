@@ -48,7 +48,7 @@ RING_COLORS = [
     (40,130,255), # orange, outer
 ]
 
-ROTATION_SENSITIVITY = 2
+ROTATION_SENSITIVITY = 1.65
 
 FONT = cv.FONT_HERSHEY_SIMPLEX
 
@@ -57,25 +57,32 @@ HEIGHT = 720
 
 # these are actually sizes of the hand
 # bigger number => closer 
-DEPTH_NEAR = 0.16
-DEPTH_FAR = 0.10
+DEPTH_NEAR = 0.12
+DEPTH_FAR = 0.095
 
 PINCH_THRESHOLD = 0.03
 
+# radians, for right hand
+LEFT_ROTATE_THRESHOLD = 2.2 
+
 # ui consts, colors are in bgr for cv2
 COLOR_BACKGROUND = (30, 25, 25)
+
 COLOR_BLACK = (0, 0, 0)
 COLOR_GRAY = (120, 120, 120)
 COLOR_LIGHT_GRAY = (200, 200, 200)
 COLOR_LIGHTER_GRAY = (225, 225, 225)
+
 COLOR_RECT_FILL = (55, 35, 35)
 COLOR_RECT_OUTLINE = (90, 90, 150)
+
 COLOR_OUTPUT_TEXT = (255, 210, 200)
-COLOR_CAPS = (60, 220, 255)
-RING_LABELS = ["INNER", "MID", "OUTER"]
-GESTURE_LEGEND = [
-    "Left Fist = type", "Left Pinch = space", "Right rotate left = back", "Right pinch = caps"
-]
+COLOR_CAPS_INDICATOR = (60, 220, 255)
+RING_LABELS = ("INNER", "MID", "OUTER")
+GESTURE_LEGEND = (
+    "Left Fist = type", "Left Pinch = space", "Right rotate left = back", "Right pinch = caps",
+    "q = quit", "c = clear"
+)
 
 def isPinch(landmarkerResult):
     return dist2d(landmarkerResult[4], landmarkerResult[8]) < PINCH_THRESHOLD
@@ -145,7 +152,7 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
     if leftHandAngle is not None:
         adjustedAngle = (leftHandAngle + math.pi/2) * ROTATION_SENSITIVITY - math.pi/2
 
-        ringRadius = RING_RADII(activeRingIndex)
+        ringRadius = RING_RADII[activeRingIndex]
         pointerLength = ringRadius + 12
 
         pointerEndX = int(centerX + pointerLength * math.cos(adjustedAngle))
@@ -173,7 +180,7 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
     cv.putText(uiFrame, f"Ring: {RING_LABELS[activeRingIndex]}", (20, 36), FONT, 0.6, RING_COLORS[activeRingIndex], 2, cv.LINE_AA)
 
     if caps:
-        cv.putText(uiFrame, "CAPS", (WIDTH-100, 36), FONT, 0.65, COLOR_CAPS, 2, cv.LINE_AA)
+        cv.putText(uiFrame, "CAPS", (WIDTH-100, 36), FONT, 0.65, COLOR_CAPS_INDICATOR, 2, cv.LINE_AA)
 
     # ------- legend
     for index, legendText in enumerate(GESTURE_LEGEND):
@@ -199,25 +206,19 @@ def angleToIndex(angle, totalItems):
     return int(position) % totalItems
 
 def seperateHands(landmarkerResult):
-    hands = landmarkerResult.hand_landmarks
-    if not hands: return None, None
-
-    if len(hands) == 1:
-        wristX = hands[0][0].x
-        isLeft = wristX < 0.5
-        return (
-            (hands[0], None) if isLeft 
-            else (None, hands[0])
-        )
+    leftHand, rightHand = None, None
+    if not landmarkerResult.hand_landmarks:
+        return None, None
     
-    handsSortedByX = sorted(
-        hands,
-        key=lambda hand: hand[0].x
-    )
-    leftHand = handsSortedByX[0]
-    rightHand = handsSortedByX[1]
+    for index, handLandmarks in enumerate(landmarkerResult.hand_landmarks):
+        handedness = landmarkerResult.handedness[index][0].category_name
+        if handedness == "Right":
+            leftHand = handLandmarks
+        elif handedness == "Left":
+            rightHand = handLandmarks
     
     return leftHand, rightHand
+
 
 
 def main():
@@ -232,26 +233,28 @@ def main():
     caps = False
     typed = ""
 
+    # states
     prevLeftOpen, prevLeftPinch = True, False
-    prevRightOpen, prevRightPinch = False, False
+    
+    prevRightPinch = False
+    prevRightRotatedLeft = False
+    
+    activeRingIndex, activeIndex = 1, 0
+    
 
     with HandTracker(options) as tracker:
         while True:
-            activeRing = 1
-            activeIndex = 0
             leftAngle = None
-
             _, frame= cap.read()
-            frame = cv.cvtColor(cv.flip(frame, 1), cv.COLOR_RGB2BGR) # flip and get rgb
+            frame = cv.cvtColor(cv.flip(frame, 1), cv.COLOR_BGR2RGB) # flip and get rgb
 
-            frame = tracker.drawLandmarksOnImage(frame)
             results = tracker.getLandMarks(frame)
 
             leftHandLandmarks, rightHandLandmarks = seperateHands(results)
 
             if leftHandLandmarks:
-                activeRing = getRing(leftHandLandmarks)
-                ringLetters = RINGS[activeRing]
+                activeRingIndex = getRing(leftHandLandmarks)
+                ringLetters = RINGS[activeRingIndex]
 
                 leftAngle = tracker.getHandOrientation(leftHandLandmarks)
                 activeIndex = angleToIndex(leftAngle, len(ringLetters))
@@ -261,8 +264,8 @@ def main():
 
                 # fist close => type
                 if prevLeftOpen and not leftOpen and not leftPinch:
-                    ch = ringLetters[activeIndex]
-                    typed += ch.upper() if caps else ch.lower()
+                    character = ringLetters[activeIndex]
+                    typed += character.upper() if caps else character.lower()
                 
                 # pinch => space
                 if leftPinch and not prevLeftPinch:
@@ -270,15 +273,34 @@ def main():
                 
                 prevLeftOpen = leftOpen
                 prevLeftPinch = leftPinch
+            if rightHandLandmarks:
+                rightPinch = isPinch(rightHandLandmarks)
+                rightAngle = tracker.getHandOrientation(rightHandLandmarks)
 
+                rightRotatedLeft = abs(rightAngle) > LEFT_ROTATE_THRESHOLD
 
-            drawUIWindow(uiFrame, centerX, centerY, activeRing, activeIndex, leftAngle, caps, typed)
+                if rightPinch and not prevRightPinch:
+                    caps = not caps
+                
+                if rightRotatedLeft and not prevRightRotatedLeft:
+                    typed = typed[:-1]
+
+                prevRightPinch = rightPinch
+                prevRightRotatedLeft = rightRotatedLeft
+
+            drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftAngle, caps, typed)
 
             frame = cv.cvtColor(frame, cv.COLOR_RGB2BGR)
             cv.imshow("Camera", frame)
             cv.imshow("UI", uiFrame)
-            if cv.waitKey(1) & 0xFF == ord('q'):
+            key = cv.waitKey(1) & 0xFF
+            if key == ord('q'):
                 break
+            elif key == ord('c'):
+                typed = ""
+    
+    cap.release()
+    cv.destroyAllWindows()
 
 
 if __name__ == "__main__":
