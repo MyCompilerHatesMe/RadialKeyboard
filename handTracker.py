@@ -73,9 +73,6 @@ class HandTracker:
         
         return returnImage
 
-cap = cv.VideoCapture(0)
-
-
 # options set up
 
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
