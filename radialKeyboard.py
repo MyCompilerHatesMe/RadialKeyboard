@@ -55,6 +55,12 @@ FONT = cv.FONT_HERSHEY_SIMPLEX
 WIDTH = 1280
 HEIGHT = 720
 
+# these are actually sizes of the hand
+# bigger number => closer 
+DEPTH_NEAR = 0.16
+DEPTH_FAR = 0.10
+
+
 def letterPos(centerX, centerY, radius, index, totalLetters):
     angle = (index/totalLetters) * (2 * math.pi) - (math.pi/2)
     # minus pi/2 to start at 12
@@ -80,6 +86,43 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRing, activeIndex, left_angle,
             cv.putText(uiFrame, label, (pos[0] - 5, pos[1] + 5), FONT,
                        0.35, (100, 100, 100), 1, cv.LINE_AA)
 
+
+def dist2d(a, b):
+    return math.hypot(a.x-b.x, a.y-b.y)
+
+def getRing(landmarks):
+    d = dist2d(landmarks[0], landmarks[9])
+    if d > DEPTH_NEAR: return 0 # inner circle
+    if d > DEPTH_FAR: return 1 # middle
+    return 2 # outer
+
+def angleToIndex(angle, totalItems):
+    angleFromTop = angle + math.pi/2
+    normalized = angleFromTop % (2*math.pi)
+    circleFraction = normalized/(2*math.pi)
+    position = circleFraction * totalItems * ROTATION_SENSITIVITY
+    return int(position) % totalItems
+
+def seperateHands(landmarkerResult):
+    hands = landmarkerResult.hand_landmarks
+    if not hands: return None, None
+
+    if len(hands) == 1:
+        wristX = hands[0][0].x
+        isLeft = wristX < 0.5
+        return (
+            (hands[0], None) if isLeft 
+            else (None, hands[0])
+        )
+    
+    handsSortedByX = sorted(
+        hands,
+        key=lambda hand: hand[0].x
+    )
+    leftHand = handsSortedByX[0]
+    rightHand = handsSortedByX[1]
+    
+    return leftHand, rightHand
 
 
 def main():
