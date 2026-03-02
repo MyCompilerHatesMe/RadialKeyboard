@@ -48,8 +48,6 @@ RING_COLORS = [
     (40,130,255), # orange, outer
 ]
 
-ROTATION_SENSITIVITY = 1.65
-
 FONT = cv.FONT_HERSHEY_SIMPLEX
 
 WIDTH = 1280
@@ -58,12 +56,15 @@ HEIGHT = 720
 # these are actually sizes of the hand
 # bigger number => closer 
 DEPTH_NEAR = 0.12
-DEPTH_FAR = 0.095
+DEPTH_FAR = 0.08
 
 PINCH_THRESHOLD = 0.03
 
 # radians, for right hand
 LEFT_ROTATE_THRESHOLD = 2.2 
+
+PHYSICAL_RANGE_LIMIT = math.pi / 3
+HAND_REST_OFFSET = -1.3
 
 # ui consts, colors are in bgr for cv2
 COLOR_BACKGROUND = (30, 25, 25)
@@ -150,13 +151,9 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
 
     # ------- pointers 
     if leftHandAngle is not None:
-        adjustedAngle = (leftHandAngle + math.pi/2) * ROTATION_SENSITIVITY - math.pi/2
-
-        ringRadius = RING_RADII[activeRingIndex]
-        pointerLength = ringRadius + 12
-
-        pointerEndX = int(centerX + pointerLength * math.cos(adjustedAngle))
-        pointerEndY = int(centerY + pointerLength * math.sin(adjustedAngle))
+        pointerRadius = RING_RADII[activeRingIndex] + 12
+        totalLetters = len(RINGS[activeRingIndex])
+        pointerEndX, pointerEndY = letterPos(centerX, centerY, pointerRadius, activeIndex, totalLetters)
 
         cv.line(uiFrame, (centerX, centerY), (pointerEndX, pointerEndY), COLOR_LIGHT_GRAY, 2, cv.LINE_AA)
 
@@ -184,7 +181,7 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
 
     # ------- legend
     for index, legendText in enumerate(GESTURE_LEGEND):
-        cv.putText(uiFrame, legendText, (WIDTH - 185, HEIGHT - 185 + index*26), 
+        cv.putText(uiFrame, legendText, (WIDTH - 300, HEIGHT - 300 + index*26), 
                    FONT, 0.42, COLOR_GRAY, 1, cv.LINE_AA)
 
 
@@ -199,11 +196,12 @@ def getRing(landmarks):
     return 2 # outer
 
 def angleToIndex(angle, totalItems):
-    angleFromTop = angle + math.pi/2
-    normalized = angleFromTop % (2*math.pi)
-    circleFraction = normalized/(2*math.pi)
-    position = circleFraction * totalItems * ROTATION_SENSITIVITY
-    return int(position) % totalItems
+    relativeAngle = angle - HAND_REST_OFFSET
+    relativeAngle = (relativeAngle + math.pi) % (2 * math.pi) - math.pi 
+    scaledProgress = (relativeAngle / PHYSICAL_RANGE_LIMIT)
+    rawIndex = scaledProgress * (totalItems / 2)
+    return math.floor(rawIndex) % totalItems
+
 
 def seperateHands(landmarkerResult):
     leftHand, rightHand = None, None
@@ -252,7 +250,7 @@ def main():
 
             leftHandLandmarks, rightHandLandmarks = seperateHands(results)
 
-            if leftHandLandmarks:
+            if leftHandLandmarks:                
                 activeRingIndex = getRing(leftHandLandmarks)
                 ringLetters = RINGS[activeRingIndex]
 
@@ -270,7 +268,7 @@ def main():
                 # pinch => space
                 if leftPinch and not prevLeftPinch:
                     typed += " "
-                
+
                 prevLeftOpen = leftOpen
                 prevLeftPinch = leftPinch
             if rightHandLandmarks:
