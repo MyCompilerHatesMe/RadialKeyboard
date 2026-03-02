@@ -12,7 +12,8 @@ class HandTracker:
     def __init__(self, options):
         self.landmarker = self.HandLandmarker.create_from_options(options)
 
-    def getLandMarks(self, mpImage):
+    def getLandMarks(self, rgbImage):
+        mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgbImage)
         return self.landmarker.detect(mpImage)
 
     def close(self):
@@ -52,10 +53,7 @@ class HandTracker:
         self.close()
     
     def drawLandmarksOnImage(self, rgbImage):
-
-        mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgbImage)
-
-        landmarkerResult = self.getLandMarks(mpImage)
+        landmarkerResult = self.getLandMarks(rgbImage)
         
         if not landmarkerResult.hand_landmarks:
             return rgbImage

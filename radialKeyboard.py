@@ -60,6 +60,26 @@ HEIGHT = 720
 DEPTH_NEAR = 0.16
 DEPTH_FAR = 0.10
 
+PINCH_THRESHOLD = 0.03
+
+# ui consts, colors are in bgr for cv2
+COLOR_BACKGROUND = (30, 25, 25)
+COLOR_BLACK = (0, 0, 0)
+COLOR_GRAY = (120, 120, 120)
+COLOR_LIGHT_GRAY = (200, 200, 200)
+COLOR_LIGHTER_GRAY = (225, 225, 225)
+COLOR_RECT_FILL = (55, 35, 35)
+COLOR_RECT_OUTLINE = (90, 90, 150)
+COLOR_OUTPUT_TEXT = (255, 210, 200)
+COLOR_CAPS = (60, 220, 255)
+RING_LABELS = ["INNER", "MID", "OUTER"]
+GESTURE_LEGEND = [
+    "Left Fist = type", "Left Pinch = space", "Right rotate left = back", "Right pinch = caps"
+]
+
+def isPinch(landmarkerResult):
+    return dist2d(landmarkerResult[4], landmarkerResult[8]) < PINCH_THRESHOLD
+
 
 def letterPos(centerX, centerY, radius, index, totalLetters):
     angle = (index/totalLetters) * (2 * math.pi) - (math.pi/2)
@@ -70,21 +90,96 @@ def letterPos(centerX, centerY, radius, index, totalLetters):
 
     return int(x), int(y)
 
-def drawUIWindow(uiFrame, centerX, centerY, activeRing, activeIndex, left_angle, caps, text):
-    uiFrame[:] = (30, 25, 25) # gray background
+def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHandAngle, caps, text):
+    uiFrame[:] = COLOR_BACKGROUND
 
-    for radius, color in zip(RING_RADII, RING_COLORS):
-        cv.circle(uiFrame, (centerX, centerY), radius, color, 1, cv.LINE_AA)
+    # ------- circles 
+    for i, (radius, color) in enumerate(zip(RING_RADII, RING_COLORS)):
+        isActive = i == activeRingIndex
+        
+        drawColor = color if isActive else tuple(c//5 for c in color)
+        thickness = 3 if isActive else 1
+
+        cv.circle(uiFrame, (centerX, centerY), radius, drawColor, thickness, cv.LINE_AA)
     
+    # ------- letters display
     for ring, (letters, radius, color) in enumerate(zip(RINGS, RING_RADII, RING_COLORS)):
         length = len(letters)
+
+        isActive = ring == activeRingIndex
+
         for j, character in enumerate(letters):
             pos = letterPos(centerX, centerY, radius, j, length)
+            isLit = isActive and (j == activeIndex)
 
-            label = character.upper() if caps else character.lower()
+            if isLit:
+                cv.circle(uiFrame, pos, 12, color, -1, cv.LINE_AA)
+                textColor = COLOR_BLACK
+                fontScale = 0.5
+                fontThickness = 2
+            
+            elif isActive:
+                textColor = COLOR_LIGHT_GRAY
+                fontScale = 0.45
+                fontThickness = 1
+            
+            else:
+                textColor = COLOR_LIGHT_GRAY
+                fontScale = 0.35
+                fontThickness = 1
 
-            cv.putText(uiFrame, label, (pos[0] - 5, pos[1] + 5), FONT,
-                       0.35, (100, 100, 100), 1, cv.LINE_AA)
+            displayChar = character.upper() if caps else character.lower()
+
+            (textWidth, textHeight), _ = cv.getTextSize(
+                displayChar,
+                FONT,
+                fontScale,
+                fontThickness
+            )
+
+
+            cv.putText(uiFrame, displayChar, (pos[0] - textWidth//2, pos[1] + textHeight//2), FONT,
+                       fontScale, textColor, fontThickness, cv.LINE_AA)
+
+    # ------- pointers 
+    if leftHandAngle is not None:
+        adjustedAngle = (leftHandAngle + math.pi/2) * ROTATION_SENSITIVITY - math.pi/2
+
+        ringRadius = RING_RADII(activeRingIndex)
+        pointerLength = ringRadius + 12
+
+        pointerEndX = int(centerX + pointerLength * math.cos(adjustedAngle))
+        pointerEndY = int(centerY + pointerLength * math.sin(adjustedAngle))
+
+        cv.line(uiFrame, (centerX, centerY), (pointerEndX, pointerEndY), COLOR_LIGHT_GRAY, 2, cv.LINE_AA)
+
+    # ------- center
+    cv.circle(uiFrame, (centerX, centerY), 4, COLOR_LIGHTER_GRAY, -1, cv.LINE_AA)
+
+    # ------- text output 
+    boxX, boxY = 40, HEIGHT - 90
+    boxWidth, boxHeight = WIDTH - 80, 60
+    # fill
+    cv.rectangle(uiFrame, (boxX, boxY), (boxX + boxWidth, boxY + boxHeight), COLOR_RECT_FILL, -1)
+    # outline
+    cv.rectangle(uiFrame, (boxX, boxY), (boxX + boxWidth, boxY + boxHeight), COLOR_RECT_OUTLINE, 2)
+
+    # clamp text
+    visibleText = (text[-55:] if len(text) > 55 else text)
+    visibleText += "|" # cursor
+    cv.putText(uiFrame, visibleText, (boxX + 14, boxY + 40), FONT, 0.75, COLOR_OUTPUT_TEXT, 2, cv.LINE_AA)
+
+    # ------- hud
+    cv.putText(uiFrame, f"Ring: {RING_LABELS[activeRingIndex]}", (20, 36), FONT, 0.6, RING_COLORS[activeRingIndex], 2, cv.LINE_AA)
+
+    if caps:
+        cv.putText(uiFrame, "CAPS", (WIDTH-100, 36), FONT, 0.65, COLOR_CAPS, 2, cv.LINE_AA)
+
+    # ------- legend
+    for index, legendText in enumerate(GESTURE_LEGEND):
+        cv.putText(uiFrame, legendText, (WIDTH - 185, HEIGHT - 185 + index*26), 
+                   FONT, 0.42, COLOR_GRAY, 1, cv.LINE_AA)
+
 
 
 def dist2d(a, b):
@@ -135,19 +230,47 @@ def main():
     centerX, centerY = WIDTH//2, HEIGHT//2
 
     caps = False
-
     typed = ""
+
+    prevLeftOpen, prevLeftPinch = True, False
+    prevRightOpen, prevRightPinch = False, False
 
     with HandTracker(options) as tracker:
         while True:
+            activeRing = 1
+            activeIndex = 0
+            leftAngle = None
+
             _, frame= cap.read()
             frame = cv.cvtColor(cv.flip(frame, 1), cv.COLOR_RGB2BGR) # flip and get rgb
 
             frame = tracker.drawLandmarksOnImage(frame)
+            results = tracker.getLandMarks(frame)
 
-            activeRing = 1
-            activeIndex = 0
-            leftAngle = None
+            leftHandLandmarks, rightHandLandmarks = seperateHands(results)
+
+            if leftHandLandmarks:
+                activeRing = getRing(leftHandLandmarks)
+                ringLetters = RINGS[activeRing]
+
+                leftAngle = tracker.getHandOrientation(leftHandLandmarks)
+                activeIndex = angleToIndex(leftAngle, len(ringLetters))
+
+                leftOpen = tracker.isHandOpen(leftHandLandmarks)
+                leftPinch = isPinch(leftHandLandmarks)
+
+                # fist close => type
+                if prevLeftOpen and not leftOpen and not leftPinch:
+                    ch = ringLetters[activeIndex]
+                    typed += ch.upper() if caps else ch.lower()
+                
+                # pinch => space
+                if leftPinch and not prevLeftPinch:
+                    typed += " "
+                
+                prevLeftOpen = leftOpen
+                prevLeftPinch = leftPinch
+
 
             drawUIWindow(uiFrame, centerX, centerY, activeRing, activeIndex, leftAngle, caps, typed)
 
