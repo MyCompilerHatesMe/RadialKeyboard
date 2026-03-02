@@ -63,8 +63,14 @@ PINCH_THRESHOLD = 0.03
 # radians, for right hand
 LEFT_ROTATE_THRESHOLD = 2.2 
 
+# sensitivity stuff
 PHYSICAL_RANGE_LIMIT = math.pi / 3
 HAND_REST_OFFSET = -1.3
+
+# smoothing 
+SMOOTHING_FACTOR = 0.2
+DEPTH_SMOOTH = 0.15
+INDEX_CHANGE_THRESHOLD = 0.2
 
 # ui consts, colors are in bgr for cv2
 COLOR_BACKGROUND = (30, 25, 25)
@@ -87,6 +93,24 @@ GESTURE_LEGEND = (
 
 def isPinch(landmarkerResult):
     return dist2d(landmarkerResult[4], landmarkerResult[8]) < PINCH_THRESHOLD
+
+
+def smoothValue(currentVal, lastVal, factor):
+    return (currentVal * factor) + (lastVal * (1.0 - factor))
+
+def smoothAngle(currentAngle, lastAngle, factor):
+    diff = (currentAngle - lastAngle + math.pi) % (2 * math.pi) - math.pi
+    return lastAngle + diff * factor
+
+def getStableIndex(rawIndex, lastIndex, totalItems):
+    diff = rawIndex - lastIndex
+
+    if diff > totalItems/2: diff -= totalItems
+    if diff < -totalItems/2: diff += totalItems
+
+    if abs(diff) > (0.5 + INDEX_CHANGE_THRESHOLD):
+        return math.floor(rawIndex + 0.5) % totalItems
+    return lastIndex
 
 
 def letterPos(centerX, centerY, radius, index, totalLetters):
@@ -189,10 +213,9 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
 def dist2d(a, b):
     return math.hypot(a.x-b.x, a.y-b.y)
 
-def getRing(landmarks):
-    d = dist2d(landmarks[0], landmarks[9])
-    if d > DEPTH_NEAR: return 0 # inner circle
-    if d > DEPTH_FAR: return 1 # middle
+def getRing(depth):
+    if depth > DEPTH_NEAR: return 0 # inner circle
+    if depth > DEPTH_FAR: return 1 # middle
     return 2 # outer
 
 def angleToIndex(angle, totalItems):
@@ -238,6 +261,10 @@ def main():
     prevRightRotatedLeft = False
     
     activeRingIndex, activeIndex = 1, 0
+
+    prevSmoothedLeftAngle = -1.3
+    prevSmoothedLeftDepth = 0.0
+    lastStableIndex = 0
     
 
     with HandTracker(options) as tracker:
@@ -250,12 +277,18 @@ def main():
 
             leftHandLandmarks, rightHandLandmarks = seperateHands(results)
 
-            if leftHandLandmarks:                
-                activeRingIndex = getRing(leftHandLandmarks)
+            if leftHandLandmarks:
+                depth = dist2d(leftHandLandmarks[0], leftHandLandmarks[9])
+                smoothedLeftDepth = smoothValue(depth, prevSmoothedLeftDepth, DEPTH_SMOOTH)
+                
+                activeRingIndex = getRing(smoothedLeftDepth)
                 ringLetters = RINGS[activeRingIndex]
 
                 leftAngle = tracker.getHandOrientation(leftHandLandmarks)
-                activeIndex = angleToIndex(leftAngle, len(ringLetters))
+                smoothedLeftAngle = smoothAngle(leftAngle, prevSmoothedLeftAngle, SMOOTHING_FACTOR)
+
+                rawIndex = angleToIndex(smoothedLeftAngle, len(ringLetters))
+                activeIndex = getStableIndex(rawIndex, lastStableIndex, len(ringLetters))
 
                 leftOpen = tracker.isHandOpen(leftHandLandmarks)
                 leftPinch = isPinch(leftHandLandmarks)
@@ -271,6 +304,9 @@ def main():
 
                 prevLeftOpen = leftOpen
                 prevLeftPinch = leftPinch
+                prevSmoothedLeftAngle = smoothedLeftAngle
+                prevSmoothedLeftDepth = smoothedLeftDepth
+
             if rightHandLandmarks:
                 rightPinch = isPinch(rightHandLandmarks)
                 rightAngle = tracker.getHandOrientation(rightHandLandmarks)
