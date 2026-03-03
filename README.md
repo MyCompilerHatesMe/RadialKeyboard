@@ -72,7 +72,6 @@ Rather than mapping the full 360° of hand rotation to the letter ring, only a p
 
 | Constant | Default | Effect |
 |----------|---------|--------|
-| `ROTATION_SENSITIVITY` | `1.65` | Higher = less wrist movement to sweep the ring |
 | `PHYSICAL_RANGE_LIMIT` | `π/3` | Arc of physical wrist rotation that covers the full ring |
 | `HAND_REST_OFFSET` | `-1.5` | Angle (radians) treated as the centre/neutral position |
 | `DEPTH_NEAR` | `0.12²` | Squared wrist→midMCP distance threshold for inner ring |
