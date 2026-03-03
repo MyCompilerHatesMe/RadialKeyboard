@@ -66,7 +66,7 @@ LEFT_ROTATE_THRESHOLD = 2.2
 
 # sensitivity stuff
 PHYSICAL_RANGE_LIMIT = math.pi / 3
-HAND_REST_OFFSET = -1.3
+HAND_REST_OFFSET = -1.5
 
 # smoothing 
 SMOOTHING_FACTOR = 0.2
@@ -248,8 +248,8 @@ def angleToIndex(angle, totalItems):
 
 def seperateHands(landmarkerResult):
     leftHand, rightHand = None, None
-    if not landmarkerResult.hand_landmarks:
-        return None, None
+    if not landmarkerResult or not landmarkerResult.hand_landmarks:
+        return leftHand, rightHand
     
     for index, handLandmarks in enumerate(landmarkerResult.hand_landmarks):
         handedness = landmarkerResult.handedness[index][0].category_name
@@ -310,10 +310,9 @@ def main():
 
             results = tracker.getLatestResult()
 
-            if results: 
-                leftHandLandmarks, rightHandLandmarks = seperateHands(results)
+            leftHandLandmarks, rightHandLandmarks = seperateHands(results)
 
-            if results and leftHandLandmarks:
+            if leftHandLandmarks:
                 depth = dist2d(leftHandLandmarks[0], leftHandLandmarks[9])
                 smoothedLeftDepth = smoothValue(depth, prevSmoothedLeftDepth, DEPTH_SMOOTH)
                 
@@ -343,7 +342,7 @@ def main():
                 prevSmoothedLeftAngle = smoothedLeftAngle
                 prevSmoothedLeftDepth = smoothedLeftDepth
 
-            if results and rightHandLandmarks:
+            if rightHandLandmarks:
                 rightPinch = isPinch(rightHandLandmarks)
                 rightAngle = tracker.getHandOrientation(rightHandLandmarks)
 
