@@ -72,15 +72,15 @@ Rather than mapping the full 360° of hand rotation to the letter ring, only a p
 
 | Constant | Default | Effect |
 |----------|---------|--------|
-| `PHYSICAL_RANGE_LIMIT` | `π/3` | Arc of physical wrist rotation that covers the full ring |
+| `PHYSICAL_RANGE_LIMIT` | `π/7` | Arc of physical wrist rotation that covers the full ring |
 | `HAND_REST_OFFSET` | `-1.5` | Angle (radians) treated as the centre/neutral position |
-| `DEPTH_NEAR` | `0.12²` | Squared wrist→midMCP distance threshold for inner ring |
-| `DEPTH_FAR` | `0.08²` | Threshold for mid vs outer ring |
-| `PINCH_THRESHOLD` | `0.03²` | Squared thumb-index distance to register as pinch |
-| `LEFT_ROTATE_THRESHOLD` | `2.2` | Right hand angle (radians) that triggers backspace |
-| `SMOOTHING_FACTOR` | `0.2` | Angle smoothing weight — higher = more responsive, more jitter |
+| `DEPTH_NEAR` | `0.24²` | Squared wrist→midMCP distance threshold for inner ring |
+| `DEPTH_FAR` | `0.13²` | Threshold for mid vs outer ring |
+| `PINCH_THRESHOLD` | `0.05²` | Squared thumb-index distance to register as pinch |
+| `LEFT_ROTATE_THRESHOLD` | `1.5` | Right hand angle (radians) that triggers backspace |
+| `SMOOTHING_FACTOR` | `0.18` | Angle smoothing weight — higher = more responsive, more jitter |
 | `DEPTH_SMOOTH` | `0.15` | Depth smoothing weight — lower = more stable ring selection |
-| `INDEX_CHANGE_THRESHOLD` | `0.2` | Hysteresis on index snapping — higher = harder to change letter |
+| `INDEX_CHANGE_THRESHOLD` | `0.15` | Hysteresis on index snapping — higher = harder to change letter |
 
 To calibrate depth zones, print `dist2d(landmarks[0], landmarks[9])` (the raw squared value) while holding your hand at each position, then set `DEPTH_NEAR` and `DEPTH_FAR` to the squared versions of those numbers.
 

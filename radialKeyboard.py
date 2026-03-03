@@ -40,9 +40,9 @@ RING_RADII = [
     233
 ]
 
-# bgr
+# rgb
 RING_COLORS = [
-    (50,230,100), # green, inner
+    (46, 125, 16), # green, inner
     (255,170,50), # blue, middle
     (40,130,255), # orange, outer
 ]
@@ -52,25 +52,27 @@ FONT = cv.FONT_HERSHEY_SIMPLEX
 WIDTH = 1280
 HEIGHT = 720
 
+
 # these are actually sizes of the hand
 # bigger number => closer 
 # distances are square cuz dist2d returns square distance
-DEPTH_NEAR = 0.26 ** 2
+# TUNABLE
+DEPTH_NEAR = 0.24 ** 2
 DEPTH_FAR = 0.13 ** 2
 
-PINCH_THRESHOLD = 0.03 ** 2
+PINCH_THRESHOLD = 0.05 ** 2
 
 # radians, for right hand
-LEFT_ROTATE_THRESHOLD = 2.2 
+LEFT_ROTATE_THRESHOLD = 1.5
 
 # sensitivity stuff
-PHYSICAL_RANGE_LIMIT = math.pi / 3
+PHYSICAL_RANGE_LIMIT = math.pi / 7
 HAND_REST_OFFSET = -1.5
 
 # smoothing 
-SMOOTHING_FACTOR = 0.2
+SMOOTHING_FACTOR = 0.18
 DEPTH_SMOOTH = 0.15
-INDEX_CHANGE_THRESHOLD = 0.2
+INDEX_CHANGE_THRESHOLD = 0.15
 
 # letter lookup
 LETTER_POSITIONS = []
@@ -103,11 +105,11 @@ GESTURE_LEGEND = (
     "q = quit", "c = clear"
 )
 
-FONT_LARGE = 0.75
+FONT_LARGE = 0.8
 FONT_MEDIUM = 0.6
-FONT_SMALL = 0.5
+FONT_SMALL = 0.4
 
-FONT_SELECTED_THICKNESS = 4
+FONT_SELECTED_THICKNESS = 3
 FONT_UNSELECTED_THICKNESS = 2
 
 def isPinch(landmarkerResult):
@@ -182,7 +184,7 @@ def createUIBackgrounds(centerX, centerY):
             isActive = i == activeIndex
 
             drawColor = color if isActive else tuple(c//5 for c in color)
-            thickness = 3 if isActive else 1
+            thickness = 1
 
             cv.circle(backgroundUpper, (centerX, centerY), radius, drawColor, thickness, cv.LINE_AA)
             cv.circle(backgroundLower, (centerX, centerY), radius, drawColor, thickness, cv.LINE_AA)
@@ -196,7 +198,7 @@ def createUIBackgrounds(centerX, centerY):
                 (width, height), _ = cv.getTextSize(char.upper(), FONT, f_scale, f_thick)
 
                 cv.putText(backgroundUpper, char.upper(), (pos[0] - width//2, pos[1] + height//2), 
-                           FONT, f_scale, COLOR_UNSELECTED_LETTER, f_thick, cv.LINE_AA)
+                           FONT, f_scale, COLOR_UNSELECTED_LETTER, f_thick, cv.LI-------NE_AA)
                 
                 # no need to recalculate cuz its a simplex font
                 cv.putText(backgroundLower, char.lower(), (pos[0] - width//2, pos[1] + height//2), 
@@ -216,12 +218,13 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
     pos = LETTER_POSITIONS[activeRingIndex][activeIndex]
     color = RING_COLORS[activeRingIndex]
 
-    cv.circle(uiFrame, pos, 16, color, -1, cv.LINE_AA)
-
     # ------- pointers 
     if leftHandAngle is not None:
         pointerEndX, pointerEndY = LETTER_POSITIONS[activeRingIndex][activeIndex]
         cv.line(uiFrame, (centerX, centerY), (pointerEndX, pointerEndY), COLOR_LIGHT_GRAY, 2, cv.LINE_AA)
+
+    # ------- circle around char
+    cv.circle(uiFrame, pos, 16, color, -1, cv.LINE_AA)
 
     # ------- selected character
     char = letters[activeIndex].upper() if caps else letters[activeIndex].lower()
