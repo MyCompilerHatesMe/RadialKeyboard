@@ -285,8 +285,6 @@ def main():
     prevSmoothedLeftDepth = 0.0
     lastStableIndex = 0
 
-    prevTimestamp_ms = 0
-
     populateLetterPositions()
 
     global UI_STATES_UPPER
