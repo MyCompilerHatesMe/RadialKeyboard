@@ -35,9 +35,9 @@ RINGS = [
 ]
 
 RING_RADII = [
-    65, 
-    110,
-    155
+    98, 
+    165,
+    233
 ]
 
 # bgr
@@ -55,8 +55,8 @@ HEIGHT = 720
 # these are actually sizes of the hand
 # bigger number => closer 
 # distances are square cuz dist2d returns square distance
-DEPTH_NEAR = 0.12 ** 2
-DEPTH_FAR = 0.08 ** 2
+DEPTH_NEAR = 0.26 ** 2
+DEPTH_FAR = 0.13 ** 2
 
 PINCH_THRESHOLD = 0.03 ** 2
 
