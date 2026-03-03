@@ -7,14 +7,35 @@ class HandTracker:
     mp_hands = mp.tasks.vision.HandLandmarksConnections
     mp_drawing = mp.tasks.vision.drawing_utils
     mp_drawing_styles = mp.tasks.vision.drawing_styles
-    HandLandmarker = mp.tasks.vision.HandLandmarker
 
-    def __init__(self, options):
+    HandLandmarker = mp.tasks.vision.HandLandmarker
+    HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+    VisionRunningMode = mp.tasks.vision.RunningMode
+
+    def __init__(self, modelPath = "models/hand_landmarker.task"):
+        self.latestResult = None
+        
+        def resultCallback(result, outputImage, timestamp_ms):
+            self.latestResult = result
+        
+        baseOptions = mp.tasks.BaseOptions(model_asset_path=modelPath)
+        options = self.HandLandmarkerOptions(
+            base_options=baseOptions,
+            running_mode=self.VisionRunningMode.LIVE_STREAM,
+            num_hands=2,
+            min_hand_detection_confidence=0.7,
+            min_tracking_confidence=0.7,
+            result_callback=resultCallback
+        )
+
         self.landmarker = self.HandLandmarker.create_from_options(options)
 
-    def getLandMarks(self, rgbImage):
+    def detectAsync(self, rgbImage, timestamp_ms):
         mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgbImage)
-        return self.landmarker.detect(mpImage)
+        self.landmarker.detect_async(mpImage, timestamp_ms)
+
+    def getLatestResult(self):
+        return self.latestResult
 
     def close(self):
         self.landmarker.close()
@@ -52,13 +73,11 @@ class HandTracker:
     def __exit__(self, *args):
         self.close()
     
-    def drawLandmarksOnImage(self, rgbImage):
-        landmarkerResult = self.getLandMarks(rgbImage)
-        
-        if not landmarkerResult.hand_landmarks:
+    def drawLandmarksOnImage(self, rgbImage):      
+        if not self.latestResult or not self.latestResult.hand_landmarks:
             return rgbImage
         
-        landmarkList = landmarkerResult.hand_landmarks
+        landmarkList = self.latestResult.hand_landmarks
         returnImage = np.copy(rgbImage)
         for landmarks in landmarkList:
             self.mp_drawing.draw_landmarks(
@@ -70,18 +89,3 @@ class HandTracker:
             )
         
         return returnImage
-
-# options set up
-
-HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
-VisionRunningMode = mp.tasks.vision.RunningMode
-modelPath = "models/hand_landmarker.task"
-baseOptions = mp.tasks.BaseOptions(model_asset_path=modelPath)
-
-options = HandLandmarkerOptions(
-    base_options=baseOptions,
-    running_mode=VisionRunningMode.IMAGE,
-    num_hands=2,
-    min_hand_detection_confidence=0.7,
-    min_tracking_confidence=0.7
-)

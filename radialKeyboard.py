@@ -23,8 +23,9 @@ KEYS
 import cv2 as cv
 import numpy as np
 import math
+import time
 
-from handTracker import HandTracker, options
+from handTracker import HandTracker
 
 # constants
 
@@ -285,23 +286,34 @@ def main():
     prevSmoothedLeftDepth = 0.0
     lastStableIndex = 0
 
+    prevTimestamp_ms = 0
+
     populateLetterPositions()
 
     global UI_STATES_UPPER
     global UI_STATES_LOWER
     UI_STATES_UPPER, UI_STATES_LOWER = createUIBackgrounds(centerX, centerY)
     
-    with HandTracker(options) as tracker:
+    with HandTracker() as tracker:
         while True:
             leftAngle = None
             _, frame= cap.read()
+
             frame = cv.cvtColor(cv.flip(frame, 1), cv.COLOR_BGR2RGB) # flip and get rgb
 
-            results = tracker.getLandMarks(frame)
+            timestamp_ms = int(time.time() * 1000)
+            if timestamp_ms <= prevTimestamp_ms:
+                timestamp_ms = prevTimestamp_ms + 1
+            prevTimestamp_ms = timestamp_ms
 
-            leftHandLandmarks, rightHandLandmarks = seperateHands(results)
+            tracker.detectAsync(frame, timestamp_ms)
 
-            if leftHandLandmarks:
+            results = tracker.getLatestResult()
+
+            if results: 
+                leftHandLandmarks, rightHandLandmarks = seperateHands(results)
+
+            if results and leftHandLandmarks:
                 depth = dist2d(leftHandLandmarks[0], leftHandLandmarks[9])
                 smoothedLeftDepth = smoothValue(depth, prevSmoothedLeftDepth, DEPTH_SMOOTH)
                 
@@ -331,7 +343,7 @@ def main():
                 prevSmoothedLeftAngle = smoothedLeftAngle
                 prevSmoothedLeftDepth = smoothedLeftDepth
 
-            if rightHandLandmarks:
+            if results and rightHandLandmarks:
                 rightPinch = isPinch(rightHandLandmarks)
                 rightAngle = tracker.getHandOrientation(rightHandLandmarks)
 
