@@ -85,17 +85,30 @@ COLOR_BLACK = (0, 0, 0)
 COLOR_GRAY = (120, 120, 120)
 COLOR_LIGHT_GRAY = (200, 200, 200)
 COLOR_LIGHTER_GRAY = (225, 225, 225)
+COLOR_WHITE = (255, 255, 255)
+
+COLOR_SELECTED_LETTER = COLOR_WHITE
+COLOR_UNSELECTED_LETTER = COLOR_LIGHTER_GRAY
 
 COLOR_RECT_FILL = (55, 35, 35)
 COLOR_RECT_OUTLINE = (90, 90, 150)
 
 COLOR_OUTPUT_TEXT = (255, 210, 200)
 COLOR_CAPS_INDICATOR = (60, 220, 255)
+
+
 RING_LABELS = ("INNER", "MID", "OUTER")
 GESTURE_LEGEND = (
     "Left Fist = type", "Left Pinch = space", "Right rotate left = back", "Right pinch = caps",
     "q = quit", "c = clear"
 )
+
+FONT_LARGE = 0.75
+FONT_MEDIUM = 0.6
+FONT_SMALL = 0.5
+
+FONT_SELECTED_THICKNESS = 4
+FONT_UNSELECTED_THICKNESS = 2
 
 def isPinch(landmarkerResult):
     return dist2d(landmarkerResult[4], landmarkerResult[8]) < PINCH_THRESHOLD
@@ -147,7 +160,7 @@ def createUIBackgrounds(centerX, centerY):
     # ------- legend
     for i, text in enumerate(GESTURE_LEGEND):
         cv.putText(baseFrame, text, (WIDTH - 300, HEIGHT - 300 + i*26), 
-               FONT, 0.42, COLOR_GRAY, 1, cv.LINE_AA)
+               FONT, FONT_SMALL, COLOR_GRAY, 1, cv.LINE_AA)
     
     # ------- text output 
     boxX, boxY = 40, HEIGHT - 90
@@ -177,17 +190,17 @@ def createUIBackgrounds(centerX, centerY):
             letters = RINGS[i]
             for j, char in enumerate(letters):
                 pos = LETTER_POSITIONS[i][j]
-                # draw letters in idle, probably at some point add more for lower and caps states
-                f_scale = 0.45 if isActive else 0.35
-                f_thick = 1
+                f_scale = FONT_MEDIUM
+                f_thick = FONT_UNSELECTED_THICKNESS
                 
                 (width, height), _ = cv.getTextSize(char.upper(), FONT, f_scale, f_thick)
+
                 cv.putText(backgroundUpper, char.upper(), (pos[0] - width//2, pos[1] + height//2), 
-                           FONT, f_scale, COLOR_LIGHT_GRAY, f_thick, cv.LINE_AA)
+                           FONT, f_scale, COLOR_UNSELECTED_LETTER, f_thick, cv.LINE_AA)
                 
                 # no need to recalculate cuz its a simplex font
                 cv.putText(backgroundLower, char.lower(), (pos[0] - width//2, pos[1] + height//2), 
-                           FONT, f_scale, COLOR_LIGHT_GRAY, f_thick, cv.LINE_AA)
+                           FONT, f_scale, COLOR_UNSELECTED_LETTER, f_thick, cv.LINE_AA)
 
         backgroundsCaps.append(backgroundUpper)
         backgroundsLower.append(backgroundLower)
@@ -198,33 +211,34 @@ def createUIBackgrounds(centerX, centerY):
 def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHandAngle, caps, text):
     uiFrame[:] = UI_STATES_UPPER[activeRingIndex] if caps else UI_STATES_LOWER[activeRingIndex]
     
-    # highlighted letter
-    radius = RING_RADII[activeRingIndex]
+    # often used vars for this
     letters = RINGS[activeRingIndex]
     pos = LETTER_POSITIONS[activeRingIndex][activeIndex]
     color = RING_COLORS[activeRingIndex]
 
-    cv.circle(uiFrame, pos, 12, color, -1, cv.LINE_AA)
-    char = letters[activeIndex].upper() if caps else letters[activeIndex].lower()
-    (width, height), _ = cv.getTextSize(char, FONT, 0.5, 2)
-    cv.putText(uiFrame, char, (pos[0] - width//2, pos[1] + height//2), 
-               FONT, 0.5, COLOR_BLACK, 2, cv.LINE_AA)
+    cv.circle(uiFrame, pos, 16, color, -1, cv.LINE_AA)
 
     # ------- pointers 
     if leftHandAngle is not None:
         pointerEndX, pointerEndY = LETTER_POSITIONS[activeRingIndex][activeIndex]
         cv.line(uiFrame, (centerX, centerY), (pointerEndX, pointerEndY), COLOR_LIGHT_GRAY, 2, cv.LINE_AA)
 
+    # ------- selected character
+    char = letters[activeIndex].upper() if caps else letters[activeIndex].lower()
+    (width, height), _ = cv.getTextSize(char, FONT, 0.5, 2)
+    cv.putText(uiFrame, char, (pos[0] - width//2, pos[1] + height//2), 
+               FONT, FONT_LARGE, COLOR_SELECTED_LETTER, FONT_SELECTED_THICKNESS, cv.LINE_AA)
+
     # clamp text
     visibleText = (text[-55:] if len(text) > 55 else text)
     visibleText += "|" # cursor
-    cv.putText(uiFrame, visibleText, (54 + 14, HEIGHT-50), FONT, 0.75, COLOR_OUTPUT_TEXT, 2, cv.LINE_AA)
+    cv.putText(uiFrame, visibleText, (54 + 14, HEIGHT-50), FONT, FONT_LARGE, COLOR_OUTPUT_TEXT, 2, cv.LINE_AA)
 
     # ------- hud
-    cv.putText(uiFrame, f"Ring: {RING_LABELS[activeRingIndex]}", (20, 36), FONT, 0.6, RING_COLORS[activeRingIndex], 2, cv.LINE_AA)
+    cv.putText(uiFrame, f"Ring: {RING_LABELS[activeRingIndex]}", (20, 36), FONT, FONT_MEDIUM, RING_COLORS[activeRingIndex], 2, cv.LINE_AA)
 
     if caps:
-        cv.putText(uiFrame, "CAPS", (WIDTH-100, 36), FONT, 0.65, COLOR_CAPS_INDICATOR, 2, cv.LINE_AA)
+        cv.putText(uiFrame, "CAPS", (WIDTH-100, 36), FONT, FONT_LARGE, COLOR_CAPS_INDICATOR, 2, cv.LINE_AA)
 
 
 
