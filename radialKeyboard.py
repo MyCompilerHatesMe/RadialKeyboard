@@ -21,7 +21,6 @@ KEYS
 """
 
 import cv2 as cv
-import mediapipe as mp
 import numpy as np
 import math
 
@@ -55,10 +54,11 @@ HEIGHT = 720
 
 # these are actually sizes of the hand
 # bigger number => closer 
-DEPTH_NEAR = 0.12
-DEPTH_FAR = 0.08
+# distances are square cuz dist2d returns square distance
+DEPTH_NEAR = 0.12 ** 2
+DEPTH_FAR = 0.08 ** 2
 
-PINCH_THRESHOLD = 0.03
+PINCH_THRESHOLD = 0.03 ** 2
 
 # radians, for right hand
 LEFT_ROTATE_THRESHOLD = 2.2 
@@ -71,6 +71,9 @@ HAND_REST_OFFSET = -1.3
 SMOOTHING_FACTOR = 0.2
 DEPTH_SMOOTH = 0.15
 INDEX_CHANGE_THRESHOLD = 0.2
+
+# letter lookup
+LETTER_POSITIONS = []
 
 # ui consts, colors are in bgr for cv2
 COLOR_BACKGROUND = (30, 25, 25)
@@ -122,6 +125,16 @@ def letterPos(centerX, centerY, radius, index, totalLetters):
 
     return int(x), int(y)
 
+# letters[activeRing][activeIdx] = letterPos()
+
+def populateLetterPositions():
+    for ringIndex, letters in enumerate(RINGS):
+        ringPoints = []
+        radius = RING_RADII[ringIndex]
+        for letterIndex in range(len(letters)):
+            ringPoints.append(letterPos(WIDTH//2, HEIGHT//2, radius, letterIndex,len(letters)))
+        LETTER_POSITIONS.append(ringPoints)
+
 def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHandAngle, caps, text):
     uiFrame[:] = COLOR_BACKGROUND
 
@@ -136,12 +149,10 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
     
     # ------- letters display
     for ring, (letters, radius, color) in enumerate(zip(RINGS, RING_RADII, RING_COLORS)):
-        length = len(letters)
-
         isActive = ring == activeRingIndex
 
         for j, character in enumerate(letters):
-            pos = letterPos(centerX, centerY, radius, j, length)
+            pos = LETTER_POSITIONS[ring][j]
             isLit = isActive and (j == activeIndex)
 
             if isLit:
@@ -175,9 +186,7 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
 
     # ------- pointers 
     if leftHandAngle is not None:
-        pointerRadius = RING_RADII[activeRingIndex] + 12
-        totalLetters = len(RINGS[activeRingIndex])
-        pointerEndX, pointerEndY = letterPos(centerX, centerY, pointerRadius, activeIndex, totalLetters)
+        pointerEndX, pointerEndY = LETTER_POSITIONS[activeRingIndex][activeIndex]
 
         cv.line(uiFrame, (centerX, centerY), (pointerEndX, pointerEndY), COLOR_LIGHT_GRAY, 2, cv.LINE_AA)
 
@@ -209,9 +218,9 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
                    FONT, 0.42, COLOR_GRAY, 1, cv.LINE_AA)
 
 
-
+# returns square distance to save on square rooting
 def dist2d(a, b):
-    return math.hypot(a.x-b.x, a.y-b.y)
+    return ((a.x-b.x)**2 + (a.y-b.y)**2)
 
 def getRing(depth):
     if depth > DEPTH_NEAR: return 0 # inner circle
@@ -265,8 +274,9 @@ def main():
     prevSmoothedLeftAngle = -1.3
     prevSmoothedLeftDepth = 0.0
     lastStableIndex = 0
-    
 
+    populateLetterPositions()
+    
     with HandTracker(options) as tracker:
         while True:
             leftAngle = None
