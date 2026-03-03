@@ -198,7 +198,7 @@ def createUIBackgrounds(centerX, centerY):
                 (width, height), _ = cv.getTextSize(char.upper(), FONT, f_scale, f_thick)
 
                 cv.putText(backgroundUpper, char.upper(), (pos[0] - width//2, pos[1] + height//2), 
-                           FONT, f_scale, COLOR_UNSELECTED_LETTER, f_thick, cv.LI-------NE_AA)
+                           FONT, f_scale, COLOR_UNSELECTED_LETTER, f_thick, cv.LINE_AA)
                 
                 # no need to recalculate cuz its a simplex font
                 cv.putText(backgroundLower, char.lower(), (pos[0] - width//2, pos[1] + height//2), 
