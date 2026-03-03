@@ -23,7 +23,6 @@ KEYS
 import cv2 as cv
 import numpy as np
 import math
-import time
 
 from handTracker import HandTracker
 
@@ -301,12 +300,7 @@ def main():
 
             frame = cv.cvtColor(cv.flip(frame, 1), cv.COLOR_BGR2RGB) # flip and get rgb
 
-            timestamp_ms = int(time.time() * 1000)
-            if timestamp_ms <= prevTimestamp_ms:
-                timestamp_ms = prevTimestamp_ms + 1
-            prevTimestamp_ms = timestamp_ms
-
-            tracker.detectAsync(frame, timestamp_ms)
+            tracker.processFrame(frame)
 
             results = tracker.getLatestResult()
 

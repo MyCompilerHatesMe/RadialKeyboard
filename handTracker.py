@@ -1,6 +1,6 @@
-import cv2 as cv
 import mediapipe as mp
 import numpy as np
+import time
 
 class HandTracker:
     
@@ -14,6 +14,7 @@ class HandTracker:
 
     def __init__(self, modelPath = "models/hand_landmarker.task"):
         self.latestResult = None
+        self._lastTimestamp_ms = 0
         
         def resultCallback(result, outputImage, timestamp_ms):
             self.latestResult = result
@@ -30,8 +31,17 @@ class HandTracker:
 
         self.landmarker = self.HandLandmarker.create_from_options(options)
 
-    def detectAsync(self, rgbImage, timestamp_ms):
+    def processFrame(self, rgbImage):
+        timestamp_ms = int(time.time() * 1000)
+        # timestamp must be strictly increasing
+        if timestamp_ms <= self._lastTimestamp_ms:
+            timestamp_ms = self._lastTimestamp_ms + 1
+        self._lastTimestamp_ms = timestamp_ms
+    
         mpImage = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgbImage)
+        self.detectAsync(mpImage, timestamp_ms)
+
+    def detectAsync(self, mpImage, timestamp_ms):
         self.landmarker.detect_async(mpImage, timestamp_ms)
 
     def getLatestResult(self):
