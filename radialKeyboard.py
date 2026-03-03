@@ -75,6 +75,9 @@ INDEX_CHANGE_THRESHOLD = 0.2
 # letter lookup
 LETTER_POSITIONS = []
 
+UI_STATES_UPPER = []
+UI_STATES_LOWER = []
+
 # ui consts, colors are in bgr for cv2
 COLOR_BACKGROUND = (30, 25, 25)
 
@@ -115,7 +118,6 @@ def getStableIndex(rawIndex, lastIndex, totalItems):
         return math.floor(rawIndex + 0.5) % totalItems
     return lastIndex
 
-
 def letterPos(centerX, centerY, radius, index, totalLetters):
     angle = (index/totalLetters) * (2 * math.pi) - (math.pi/2)
     # minus pi/2 to start at 12
@@ -125,8 +127,6 @@ def letterPos(centerX, centerY, radius, index, totalLetters):
 
     return int(x), int(y)
 
-# letters[activeRing][activeIdx] = letterPos()
-
 def populateLetterPositions():
     for ringIndex, letters in enumerate(RINGS):
         ringPoints = []
@@ -135,76 +135,90 @@ def populateLetterPositions():
             ringPoints.append(letterPos(WIDTH//2, HEIGHT//2, radius, letterIndex,len(letters)))
         LETTER_POSITIONS.append(ringPoints)
 
-def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHandAngle, caps, text):
-    uiFrame[:] = COLOR_BACKGROUND
 
-    # ------- circles 
-    for i, (radius, color) in enumerate(zip(RING_RADII, RING_COLORS)):
-        isActive = i == activeRingIndex
-        
-        drawColor = color if isActive else tuple(c//5 for c in color)
-        thickness = 3 if isActive else 1
+def createUIBackgrounds(centerX, centerY):
+    backgroundsCaps = []
+    backgroundsLower = []
 
-        cv.circle(uiFrame, (centerX, centerY), radius, drawColor, thickness, cv.LINE_AA)
+    # contains all the static elements
+    baseFrame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    baseFrame[:] = COLOR_BACKGROUND
+
+    # ------- legend
+    for i, text in enumerate(GESTURE_LEGEND):
+        cv.putText(baseFrame, text, (WIDTH - 300, HEIGHT - 300 + i*26), 
+               FONT, 0.42, COLOR_GRAY, 1, cv.LINE_AA)
     
-    # ------- letters display
-    for ring, (letters, radius, color) in enumerate(zip(RINGS, RING_RADII, RING_COLORS)):
-        isActive = ring == activeRingIndex
-
-        for j, character in enumerate(letters):
-            pos = LETTER_POSITIONS[ring][j]
-            isLit = isActive and (j == activeIndex)
-
-            if isLit:
-                cv.circle(uiFrame, pos, 12, color, -1, cv.LINE_AA)
-                textColor = COLOR_BLACK
-                fontScale = 0.5
-                fontThickness = 2
-            
-            elif isActive:
-                textColor = COLOR_LIGHT_GRAY
-                fontScale = 0.45
-                fontThickness = 1
-            
-            else:
-                textColor = COLOR_LIGHT_GRAY
-                fontScale = 0.35
-                fontThickness = 1
-
-            displayChar = character.upper() if caps else character.lower()
-
-            (textWidth, textHeight), _ = cv.getTextSize(
-                displayChar,
-                FONT,
-                fontScale,
-                fontThickness
-            )
-
-
-            cv.putText(uiFrame, displayChar, (pos[0] - textWidth//2, pos[1] + textHeight//2), FONT,
-                       fontScale, textColor, fontThickness, cv.LINE_AA)
-
-    # ------- pointers 
-    if leftHandAngle is not None:
-        pointerEndX, pointerEndY = LETTER_POSITIONS[activeRingIndex][activeIndex]
-
-        cv.line(uiFrame, (centerX, centerY), (pointerEndX, pointerEndY), COLOR_LIGHT_GRAY, 2, cv.LINE_AA)
-
-    # ------- center
-    cv.circle(uiFrame, (centerX, centerY), 4, COLOR_LIGHTER_GRAY, -1, cv.LINE_AA)
-
     # ------- text output 
     boxX, boxY = 40, HEIGHT - 90
     boxWidth, boxHeight = WIDTH - 80, 60
     # fill
-    cv.rectangle(uiFrame, (boxX, boxY), (boxX + boxWidth, boxY + boxHeight), COLOR_RECT_FILL, -1)
+    cv.rectangle(baseFrame, (boxX, boxY), (boxX + boxWidth, boxY + boxHeight), COLOR_RECT_FILL, -1)
     # outline
-    cv.rectangle(uiFrame, (boxX, boxY), (boxX + boxWidth, boxY + boxHeight), COLOR_RECT_OUTLINE, 2)
+    cv.rectangle(baseFrame, (boxX, boxY), (boxX + boxWidth, boxY + boxHeight), COLOR_RECT_OUTLINE, 2)
+
+    # ------- center
+    cv.circle(baseFrame, (centerX, centerY), 4, COLOR_LIGHTER_GRAY, -1, cv.LINE_AA)
+
+    # create a different background for each of the active rings  
+    for activeIndex in range(3):
+        backgroundUpper = np.copy(baseFrame)
+        backgroundLower = np.copy(baseFrame)
+
+        for i, (radius, color) in enumerate(zip(RING_RADII, RING_COLORS)):
+            isActive = i == activeIndex
+
+            drawColor = color if isActive else tuple(c//5 for c in color)
+            thickness = 3 if isActive else 1
+
+            cv.circle(backgroundUpper, (centerX, centerY), radius, drawColor, thickness, cv.LINE_AA)
+            cv.circle(backgroundLower, (centerX, centerY), radius, drawColor, thickness, cv.LINE_AA)
+
+            letters = RINGS[i]
+            for j, char in enumerate(letters):
+                pos = LETTER_POSITIONS[i][j]
+                # draw letters in idle, probably at some point add more for lower and caps states
+                f_scale = 0.45 if isActive else 0.35
+                f_thick = 1
+                
+                (width, height), _ = cv.getTextSize(char.upper(), FONT, f_scale, f_thick)
+                cv.putText(backgroundUpper, char.upper(), (pos[0] - width//2, pos[1] + height//2), 
+                           FONT, f_scale, COLOR_LIGHT_GRAY, f_thick, cv.LINE_AA)
+                
+                # no need to recalculate cuz its a simplex font
+                cv.putText(backgroundLower, char.lower(), (pos[0] - width//2, pos[1] + height//2), 
+                           FONT, f_scale, COLOR_LIGHT_GRAY, f_thick, cv.LINE_AA)
+
+        backgroundsCaps.append(backgroundUpper)
+        backgroundsLower.append(backgroundLower)
+    return backgroundsCaps, backgroundsLower
+        
+
+
+def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHandAngle, caps, text):
+    uiFrame[:] = UI_STATES_UPPER[activeRingIndex] if caps else UI_STATES_LOWER[activeRingIndex]
+    
+    # highlighted letter
+    radius = RING_RADII[activeRingIndex]
+    letters = RINGS[activeRingIndex]
+    pos = LETTER_POSITIONS[activeRingIndex][activeIndex]
+    color = RING_COLORS[activeRingIndex]
+
+    cv.circle(uiFrame, pos, 12, color, -1, cv.LINE_AA)
+    char = letters[activeIndex].upper() if caps else letters[activeIndex].lower()
+    (width, height), _ = cv.getTextSize(char, FONT, 0.5, 2)
+    cv.putText(uiFrame, char, (pos[0] - width//2, pos[1] + height//2), 
+               FONT, 0.5, COLOR_BLACK, 2, cv.LINE_AA)
+
+    # ------- pointers 
+    if leftHandAngle is not None:
+        pointerEndX, pointerEndY = LETTER_POSITIONS[activeRingIndex][activeIndex]
+        cv.line(uiFrame, (centerX, centerY), (pointerEndX, pointerEndY), COLOR_LIGHT_GRAY, 2, cv.LINE_AA)
 
     # clamp text
     visibleText = (text[-55:] if len(text) > 55 else text)
     visibleText += "|" # cursor
-    cv.putText(uiFrame, visibleText, (boxX + 14, boxY + 40), FONT, 0.75, COLOR_OUTPUT_TEXT, 2, cv.LINE_AA)
+    cv.putText(uiFrame, visibleText, (54 + 14, HEIGHT-50), FONT, 0.75, COLOR_OUTPUT_TEXT, 2, cv.LINE_AA)
 
     # ------- hud
     cv.putText(uiFrame, f"Ring: {RING_LABELS[activeRingIndex]}", (20, 36), FONT, 0.6, RING_COLORS[activeRingIndex], 2, cv.LINE_AA)
@@ -212,10 +226,6 @@ def drawUIWindow(uiFrame, centerX, centerY, activeRingIndex, activeIndex, leftHa
     if caps:
         cv.putText(uiFrame, "CAPS", (WIDTH-100, 36), FONT, 0.65, COLOR_CAPS_INDICATOR, 2, cv.LINE_AA)
 
-    # ------- legend
-    for index, legendText in enumerate(GESTURE_LEGEND):
-        cv.putText(uiFrame, legendText, (WIDTH - 300, HEIGHT - 300 + index*26), 
-                   FONT, 0.42, COLOR_GRAY, 1, cv.LINE_AA)
 
 
 # returns square distance to save on square rooting
@@ -276,6 +286,10 @@ def main():
     lastStableIndex = 0
 
     populateLetterPositions()
+
+    global UI_STATES_UPPER
+    global UI_STATES_LOWER
+    UI_STATES_UPPER, UI_STATES_LOWER = createUIBackgrounds(centerX, centerY)
     
     with HandTracker(options) as tracker:
         while True:
